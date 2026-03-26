@@ -40,11 +40,11 @@ const leadSchema = new mongoose.Schema({
     },
     propertyType: {
         type: String,
-        enum: ['1BHK', '2BHK', 'Villa', 'Plot'],
+        enum: ['1BHK', '2BHK', '3BHK', 'Villa', 'Plot'],
         required: [true, 'Please specify property type']
     },
     budget: {
-        type: Number,
+        type: String,
         required: [true, 'Please add a budget']
     },
     location: {
@@ -53,7 +53,7 @@ const leadSchema = new mongoose.Schema({
     },
     source: {
         type: String,
-        enum: ['Website', 'Instagram', 'Call', 'Referral'],
+        enum: ['Website', 'Instagram', 'Call', 'Referral', 'Social Media', 'Advertisement', 'Walk-in'],
         default: 'Website'
     },
     status: {

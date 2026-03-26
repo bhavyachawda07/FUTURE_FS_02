@@ -6,32 +6,27 @@ interface NavbarProps {
   sidebarCollapsed: boolean;
 }
 
+import { useNavigate } from 'react-router';
+
 export function Navbar({ sidebarCollapsed }: NavbarProps) {
+  const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
+  const [user, setUser] = useState<any>(null);
   const profileRef = useRef<HTMLDivElement>(null);
-  const notifRef = useRef<HTMLDivElement>(null);
-
+  
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
-        setShowProfileMenu(false);
-      }
-      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
-        setShowNotifications(false);
-      }
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
     }
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const notifications = [
-    { id: 1, text: 'New lead from contact form', time: '5 min ago', unread: true },
-    { id: 2, text: 'Site visit scheduled for tomorrow', time: '1 hour ago', unread: true },
-    { id: 3, text: 'Lead converted to deal', time: '2 hours ago', unread: false },
-  ];
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate('/login');
+  };
 
   return (
     <header
@@ -63,37 +58,6 @@ export function Navbar({ sidebarCollapsed }: NavbarProps) {
             )}
           </button>
 
-          <div className="relative" ref={notifRef}>
-            <button
-              onClick={() => setShowNotifications(!showNotifications)}
-              className="p-2 rounded-lg hover:bg-accent transition-colors relative"
-            >
-              <Bell className="w-5 h-5 text-foreground" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-            </button>
-
-            {showNotifications && (
-              <div className="absolute right-0 mt-2 w-80 bg-popover border border-border rounded-lg shadow-lg overflow-hidden">
-                <div className="px-4 py-3 border-b border-border">
-                  <h3 className="text-popover-foreground">Notifications</h3>
-                </div>
-                <div className="max-h-96 overflow-y-auto">
-                  {notifications.map((notif) => (
-                    <div
-                      key={notif.id}
-                      className={`px-4 py-3 border-b border-border hover:bg-accent cursor-pointer ${
-                        notif.unread ? 'bg-accent/50' : ''
-                      }`}
-                    >
-                      <p className="text-sm text-popover-foreground">{notif.text}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{notif.time}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
           <div className="relative" ref={profileRef}>
             <button
               onClick={() => setShowProfileMenu(!showProfileMenu)}
@@ -107,15 +71,24 @@ export function Navbar({ sidebarCollapsed }: NavbarProps) {
             {showProfileMenu && (
               <div className="absolute right-0 mt-2 w-56 bg-popover border border-border rounded-lg shadow-lg overflow-hidden">
                 <div className="px-4 py-3 border-b border-border">
-                  <p className="text-popover-foreground">John Doe</p>
-                  <p className="text-xs text-muted-foreground">john@realestate.com</p>
+                  <p className="text-popover-foreground">{user?.name || 'User'}</p>
+                  <p className="text-xs text-muted-foreground">{user?.email || 'email@example.com'}</p>
                 </div>
                 <div className="py-2">
-                  <button className="w-full px-4 py-2 text-left hover:bg-accent flex items-center gap-2 text-popover-foreground">
+                  <button 
+                    onClick={() => {
+                        setShowProfileMenu(false);
+                        navigate('/settings');
+                    }}
+                    className="w-full px-4 py-2 text-left hover:bg-accent flex items-center gap-2 text-popover-foreground"
+                  >
                     <Settings className="w-4 h-4" />
                     Settings
                   </button>
-                  <button className="w-full px-4 py-2 text-left hover:bg-accent flex items-center gap-2 text-destructive">
+                  <button 
+                    onClick={handleLogout}
+                    className="w-full px-4 py-2 text-left hover:bg-accent flex items-center gap-2 text-destructive"
+                  >
                     <LogOut className="w-4 h-4" />
                     Logout
                   </button>
@@ -128,3 +101,4 @@ export function Navbar({ sidebarCollapsed }: NavbarProps) {
     </header>
   );
 }
+

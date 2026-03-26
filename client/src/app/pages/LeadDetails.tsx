@@ -1,6 +1,9 @@
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { ArrowLeft, Phone, Mail, MapPin, Calendar, Edit, Trash2, DollarSign, Home } from 'lucide-react';
-import { mockLeads } from '../data/mockData';
+import { ArrowLeft, Phone, Mail, MapPin, Calendar, Edit, Trash2, DollarSign, Home, Loader2, Send, Plus } from 'lucide-react';
+import { Lead } from '../data/mockData';
+import { api } from '../lib/api';
+import { toast } from 'sonner';
 
 const statusColors = {
   New: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
@@ -13,7 +16,67 @@ const statusColors = {
 export function LeadDetails() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const lead = mockLeads.find((l) => l.id === id);
+  const [lead, setLead] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [noteText, setNoteText] = useState('');
+  const [addingNote, setAddingNote] = useState(false);
+
+  useEffect(() => {
+    fetchLead();
+  }, [id]);
+
+  const fetchLead = async () => {
+    try {
+      const response = await api.leads.getOne(id as string);
+      setLead(response.data);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to fetch lead details');
+      navigate('/leads');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (window.confirm('Are you sure you want to delete this lead?')) {
+      try {
+        await api.leads.delete(id as string);
+        toast.success('Lead deleted successfully');
+        navigate('/leads');
+      } catch (error: any) {
+        toast.error(error.message || 'Failed to delete lead');
+      }
+    }
+  };
+
+  const handleAddNote = async () => {
+    if (!noteText.trim()) return;
+    setAddingNote(true);
+    try {
+      const response = await api.leads.update(id as string, {
+        notes: [
+          ...(lead.notes || []),
+          { text: noteText, date: new Date() }
+        ]
+      });
+      setLead({ ...lead, notes: response.data.notes });
+      setNoteText('');
+      toast.success('Note added');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to add note');
+    } finally {
+      setAddingNote(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-4">
+        <Loader2 className="w-10 h-10 text-primary animate-spin" />
+        <p className="text-muted-foreground italic">Loading lead details...</p>
+      </div>
+    );
+  }
 
   if (!lead) {
     return (
@@ -31,8 +94,8 @@ export function LeadDetails() {
 
   const timeline = [
     { date: lead.createdAt, status: 'New', description: 'Lead created' },
-    ...(lead.lastContact ? [{ date: lead.lastContact, status: 'Contacted', description: 'Last contacted' }] : []),
-    ...(lead.followUpDate ? [{ date: lead.followUpDate, status: 'Follow-up', description: 'Follow-up scheduled' }] : []),
+    ...(lead.updatedAt !== lead.createdAt ? [{ date: lead.updatedAt, status: 'Updated', description: 'Last modified' }] : []),
+    ...(lead.followUps?.length ? [{ date: lead.followUps[0].date, status: 'Follow-up', description: 'Next follow-up' }] : []),
   ];
 
   return (
@@ -51,18 +114,21 @@ export function LeadDetails() {
             <div className="flex items-start justify-between mb-6">
               <div>
                 <h1 className="mb-2">{lead.name}</h1>
-                <span className={`inline-block px-3 py-1 rounded-full text-sm ${statusColors[lead.status]}`}>
+                <span className={`inline-block px-3 py-1 rounded-full text-sm ${statusColors[lead.status as keyof typeof statusColors]}`}>
                   {lead.status}
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => navigate(`/edit-lead/${lead.id}`)}
+                  onClick={() => navigate(`/edit-lead/${lead._id}`)}
                   className="p-2 bg-secondary text-secondary-foreground rounded-lg hover:opacity-90 transition-opacity"
                 >
                   <Edit className="w-5 h-5" />
                 </button>
-                <button className="p-2 bg-destructive/10 text-destructive rounded-lg hover:bg-destructive/20 transition-colors">
+                <button 
+                  onClick={handleDelete}
+                  className="p-2 bg-destructive/10 text-destructive rounded-lg hover:bg-destructive/20 transition-colors"
+                >
                   <Trash2 className="w-5 h-5" />
                 </button>
               </div>
@@ -87,7 +153,7 @@ export function LeadDetails() {
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Email</p>
-                      <p className="break-all">{lead.email}</p>
+                      <p className="break-all">{lead.email || 'No email provided'}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
@@ -167,21 +233,36 @@ export function LeadDetails() {
           <div className="bg-card rounded-xl border border-border p-6">
             <h3 className="mb-4">Notes</h3>
             <div className="space-y-4">
-              <div className="p-4 bg-accent rounded-lg">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm">System Note</span>
-                  <span className="text-xs text-muted-foreground">{lead.createdAt}</span>
-                </div>
-                <p className="text-sm">{lead.notes}</p>
-              </div>
+              {lead.notes && lead.notes.length > 0 ? (
+                lead.notes.map((note: any, idx: number) => (
+                  <div key={idx} className="p-4 bg-accent rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium">Note {idx + 1}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(note.date).toLocaleString()}
+                      </span>
+                    </div>
+                    <p className="text-sm">{note.text}</p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground italic">No notes added yet.</p>
+              )}
             </div>
             <div className="mt-4">
               <textarea
+                value={noteText}
+                onChange={(e) => setNoteText(e.target.value)}
                 placeholder="Add a new note..."
                 rows={3}
                 className="w-full px-4 py-2 bg-input-background rounded-lg border border-transparent focus:border-primary focus:outline-none transition-colors resize-none"
               />
-              <button className="mt-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity">
+              <button 
+                onClick={handleAddNote}
+                disabled={addingNote || !noteText.trim()}
+                className="mt-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-2"
+              >
+                {addingNote ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                 Add Note
               </button>
             </div>
@@ -192,14 +273,22 @@ export function LeadDetails() {
           <div className="bg-card rounded-xl border border-border p-6">
             <h3 className="mb-4">Quick Actions</h3>
             <div className="space-y-3">
-              <button className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
+              <a 
+                href={`tel:${lead.phone}`}
+                className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+              >
                 <Phone className="w-4 h-4" />
                 Call Lead
-              </button>
-              <button className="w-full px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
-                <Mail className="w-4 h-4" />
-                Send Email
-              </button>
+              </a>
+              {lead.email && (
+                <a 
+                  href={`mailto:${lead.email}`}
+                  className="w-full px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+                >
+                  <Mail className="w-4 h-4" />
+                  Send Email
+                </a>
+              )}
               <button className="w-full px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2">
                 <Calendar className="w-4 h-4" />
                 Schedule Visit
@@ -210,18 +299,14 @@ export function LeadDetails() {
           <div className="bg-card rounded-xl border border-border p-6">
             <h3 className="mb-4">Follow-up Reminder</h3>
             <div className="space-y-3">
-              <input
-                type="date"
-                defaultValue={lead.followUpDate}
-                className="w-full px-4 py-2 bg-input-background rounded-lg border border-transparent focus:border-primary focus:outline-none transition-colors"
-              />
-              <input
-                type="time"
-                defaultValue="10:00"
-                className="w-full px-4 py-2 bg-input-background rounded-lg border border-transparent focus:border-primary focus:outline-none transition-colors"
-              />
-              <button className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity">
-                Set Reminder
+              <p className="text-sm text-muted-foreground">
+                Current follow-ups: {lead.followUps?.length || 0}
+              </p>
+              <button 
+                onClick={() => navigate(`/edit-lead/${lead._id}`)}
+                className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity"
+              >
+                Manage Follow-ups
               </button>
             </div>
           </div>

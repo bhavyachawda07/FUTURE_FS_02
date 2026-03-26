@@ -1,7 +1,9 @@
-import { useState } from 'react';
-import { Search, Filter, Plus, Eye, Edit, Trash2, Phone, Mail } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, Filter, Plus, Eye, Edit, Trash2, Phone, Mail, Users, Loader2 } from 'lucide-react';
 import { Link } from 'react-router';
-import { mockLeads, Lead } from '../data/mockData';
+import { Lead } from '../data/mockData';
+import { api } from '../lib/api';
+import { toast } from 'sonner';
 
 const statusColors = {
   New: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
@@ -12,23 +14,62 @@ const statusColors = {
 };
 
 export function Leads() {
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [propertyFilter, setPropertyFilter] = useState<string>('all');
   const [showFilters, setShowFilters] = useState(false);
 
-  const filteredLeads = mockLeads.filter((lead) => {
+  useEffect(() => {
+    fetchLeads();
+  }, []);
+
+  const fetchLeads = async () => {
+    try {
+      const response = await api.leads.getAll();
+      // Map MongoDB _id to id if necessary, but mockData Lead interface uses id
+      const formattedLeads = response.data.map((l: any) => ({
+        ...l,
+        id: l._id || l.id
+      }));
+      setLeads(formattedLeads);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to fetch leads');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredLeads = leads.filter((lead) => {
+    const name = lead.name || '';
+    const email = lead.email || '';
+    const phone = lead.phone || '';
+    const location = lead.location || '';
+    
     const matchesSearch =
-      lead.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lead.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lead.phone.includes(searchQuery) ||
-      lead.location.toLowerCase().includes(searchQuery.toLowerCase());
+      name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      phone.includes(searchQuery) ||
+      location.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesStatus = statusFilter === 'all' || lead.status === statusFilter;
     const matchesProperty = propertyFilter === 'all' || lead.propertyType === propertyFilter;
 
     return matchesSearch && matchesStatus && matchesProperty;
   });
+
+  const handleDelete = async (id: string) => {
+    if (window.confirm('Are you sure you want to delete this lead?')) {
+      try {
+        await api.leads.delete(id);
+        toast.success('Lead deleted successfully');
+        setLeads(leads.filter(l => l.id !== id));
+      } catch (error: any) {
+        toast.error(error.message || 'Failed to delete lead');
+      }
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -102,123 +143,139 @@ export function Leads() {
           </div>
         )}
 
-        <div className="hidden lg:block overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="text-left py-3 px-4">Name</th>
-                <th className="text-left py-3 px-4">Contact</th>
-                <th className="text-left py-3 px-4">Property</th>
-                <th className="text-left py-3 px-4">Budget</th>
-                <th className="text-left py-3 px-4">Location</th>
-                <th className="text-left py-3 px-4">Status</th>
-                <th className="text-left py-3 px-4">Source</th>
-                <th className="text-left py-3 px-4">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <Loader2 className="w-10 h-10 text-primary animate-spin" />
+            <p className="text-muted-foreground italic">Fetching your leads...</p>
+          </div>
+        ) : (
+          <>
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-3 px-4">Name</th>
+                    <th className="text-left py-3 px-4">Contact</th>
+                    <th className="text-left py-3 px-4">Property</th>
+                    <th className="text-left py-3 px-4">Budget</th>
+                    <th className="text-left py-3 px-4">Location</th>
+                    <th className="text-left py-3 px-4">Status</th>
+                    <th className="text-left py-3 px-4">Source</th>
+                    <th className="text-left py-3 px-4">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredLeads.map((lead) => (
+                    <tr key={lead.id} className="border-b border-border hover:bg-accent transition-colors">
+                      <td className="py-4 px-4">{lead.name}</td>
+                      <td className="py-4 px-4">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 text-sm">
+                            <Phone className="w-3 h-3" />
+                            {lead.phone}
+                          </div>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Mail className="w-3 h-3" />
+                            {lead.email}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4">{lead.propertyType}</td>
+                      <td className="py-4 px-4">{lead.budget}</td>
+                      <td className="py-4 px-4">{lead.location}</td>
+                      <td className="py-4 px-4">
+                        <span className={`px-2 py-1 rounded-full text-xs ${statusColors[lead.status]}`}>
+                          {lead.status}
+                        </span>
+                      </td>
+                      <td className="py-4 px-4 text-sm text-muted-foreground">{lead.source}</td>
+                      <td className="py-4 px-4">
+                        <div className="flex items-center gap-2">
+                          <Link
+                            to={`/leads/${lead.id}`}
+                            className="p-2 hover:bg-secondary rounded-lg transition-colors"
+                            title="View Details"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Link>
+                          <Link
+                            to={`/edit-lead/${lead.id}`}
+                            className="p-2 hover:bg-secondary rounded-lg transition-colors"
+                            title="Edit Lead"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Link>
+                          <button
+                            onClick={() => handleDelete(lead.id)}
+                            className="p-2 hover:bg-destructive/10 text-destructive rounded-lg transition-colors"
+                            title="Delete Lead"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="lg:hidden space-y-4">
               {filteredLeads.map((lead) => (
-                <tr key={lead.id} className="border-b border-border hover:bg-accent transition-colors">
-                  <td className="py-4 px-4">{lead.name}</td>
-                  <td className="py-4 px-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 text-sm">
-                        <Phone className="w-3 h-3" />
-                        {lead.phone}
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Mail className="w-3 h-3" />
-                        {lead.email}
-                      </div>
+                <div key={lead.id} className="p-4 bg-accent rounded-lg space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-medium">{lead.name}</p>
+                      <span className={`inline-block mt-2 px-2 py-1 rounded-full text-xs ${statusColors[lead.status]}`}>
+                        {lead.status}
+                      </span>
                     </div>
-                  </td>
-                  <td className="py-4 px-4">{lead.propertyType}</td>
-                  <td className="py-4 px-4">{lead.budget}</td>
-                  <td className="py-4 px-4">{lead.location}</td>
-                  <td className="py-4 px-4">
-                    <span className={`px-2 py-1 rounded-full text-xs ${statusColors[lead.status]}`}>
-                      {lead.status}
-                    </span>
-                  </td>
-                  <td className="py-4 px-4 text-sm text-muted-foreground">{lead.source}</td>
-                  <td className="py-4 px-4">
                     <div className="flex items-center gap-2">
                       <Link
                         to={`/leads/${lead.id}`}
                         className="p-2 hover:bg-secondary rounded-lg transition-colors"
-                        title="View Details"
                       >
                         <Eye className="w-4 h-4" />
                       </Link>
                       <Link
                         to={`/edit-lead/${lead.id}`}
                         className="p-2 hover:bg-secondary rounded-lg transition-colors"
-                        title="Edit Lead"
                       >
                         <Edit className="w-4 h-4" />
                       </Link>
                       <button
+                        onClick={() => handleDelete(lead.id)}
                         className="p-2 hover:bg-destructive/10 text-destructive rounded-lg transition-colors"
-                        title="Delete Lead"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                  </td>
-                </tr>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Phone className="w-4 h-4 text-muted-foreground" />
+                      {lead.phone}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-muted-foreground" />
+                      {lead.email}
+                    </div>
+                    <div className="text-muted-foreground">
+                      {lead.propertyType} • {lead.budget}
+                    </div>
+                    <div className="text-muted-foreground">{lead.location}</div>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="lg:hidden space-y-4">
-          {filteredLeads.map((lead) => (
-            <div key={lead.id} className="p-4 bg-accent rounded-lg space-y-3">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="font-medium">{lead.name}</p>
-                  <span className={`inline-block mt-2 px-2 py-1 rounded-full text-xs ${statusColors[lead.status]}`}>
-                    {lead.status}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Link
-                    to={`/leads/${lead.id}`}
-                    className="p-2 hover:bg-secondary rounded-lg transition-colors"
-                  >
-                    <Eye className="w-4 h-4" />
-                  </Link>
-                  <Link
-                    to={`/edit-lead/${lead.id}`}
-                    className="p-2 hover:bg-secondary rounded-lg transition-colors"
-                  >
-                    <Edit className="w-4 h-4" />
-                  </Link>
-                </div>
-              </div>
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <Phone className="w-4 h-4 text-muted-foreground" />
-                  {lead.phone}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Mail className="w-4 h-4 text-muted-foreground" />
-                  {lead.email}
-                </div>
-                <div className="text-muted-foreground">
-                  {lead.propertyType} • {lead.budget}
-                </div>
-                <div className="text-muted-foreground">{lead.location}</div>
-              </div>
             </div>
-          ))}
-        </div>
 
-        {filteredLeads.length === 0 && (
-          <div className="text-center py-12">
-            <Users className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-muted-foreground">No leads found matching your criteria</p>
-          </div>
+            {filteredLeads.length === 0 && (
+              <div className="text-center py-12">
+                <Users className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                <p className="text-muted-foreground">No leads found matching your criteria</p>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

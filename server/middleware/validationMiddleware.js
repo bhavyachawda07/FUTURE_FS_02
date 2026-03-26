@@ -18,8 +18,8 @@ exports.validateRegister = [
 exports.validateLead = [
     body('name').notEmpty().withMessage('Name is required'),
     body('phone').notEmpty().withMessage('Phone is required'),
-    body('propertyType').isIn(['1BHK', '2BHK', 'Villa', 'Plot']).withMessage('Invalid property type'),
-    body('budget').isNumeric().withMessage('Budget must be a number'),
+    body('propertyType').isIn(['1BHK', '2BHK', '3BHK', 'Villa', 'Plot']).withMessage('Invalid property type'),
+    body('budget').notEmpty().withMessage('Budget is required'),
     body('location').notEmpty().withMessage('Location is required'),
     (req, res, next) => {
         const errors = validationResult(req);
